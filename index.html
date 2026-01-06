@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 2: CryptoWeak - Token Forgery | VAPOR Security Labs</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .token-box {
+            word-break: break-all;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+        .glow {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // Simple JWT simulation functions
+        const base64UrlEncode = (str) => {
+            return btoa(str)
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        };
+
+        const base64UrlDecode = (str) => {
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (str.length % 4) str += '=';
+            return atob(str);
+        };
+
+        const createJWT = (payload, secret) => {
+            const header = { alg: "HS256", typ: "JWT" };
+            const encodedHeader = base64UrlEncode(JSON.stringify(header));
+            const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+            
+            // Simulated HMAC-SHA256 signature (in real app, would use crypto library)
+            const signature = base64UrlEncode(btoa(secret + encodedHeader + encodedPayload));
+            
+            return `${encodedHeader}.${encodedPayload}.${signature}`;
+        };
+
+        const decodeJWT = (token) => {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) return null;
+                
+                const header = JSON.parse(base64UrlDecode(parts[0]));
+                const payload = JSON.parse(base64UrlDecode(parts[1]));
+                
+                return { header, payload, signature: parts[2] };
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const verifyJWT = (token, secret) => {
+            const decoded = decodeJWT(token);
+            if (!decoded) return false;
+            
+            const { header, payload } = decoded;
+            const recreated = createJWT(payload, secret);
+            
+            return recreated === token;
+        };
+
+        function App() {
+            const [stage, setStage] = useState('login'); // login, authenticated, forge, admin, success
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [token, setToken] = useState('');
+            const [decoded, setDecoded] = useState(null);
+            const [hint1Visible, setHint1Visible] = useState(false);
+            const [hint2Visible, setHint2Visible] = useState(false);
+            const [discoveredSecret, setDiscoveredSecret] = useState('');
+            const [forgedToken, setForgedToken] = useState('');
+            const [adminToken, setAdminToken] = useState('');
+            const [error, setError] = useState('');
+
+            const SECRET = 'butterfly';
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                setError('');
+
+                // Easter egg for admin credentials
+                if (username === 'admin' && password === 'admin') {
+                    setError('Hey Genius, But it ain\'t gonna work here 😏');
+                    return;
+                }
+
+                if (username === 'guest' && password === 'guest123') {
+                    const payload = {
+                        user: 'guest',
+                        role: 'user',
+                        iat: Math.floor(Date.now() / 1000)
+                    };
+                    const jwt = createJWT(payload, SECRET);
+                    setToken(jwt);
+                    setDecoded(decodeJWT(jwt));
+                    setStage('authenticated');
+                } else {
+                    setError('Invalid credentials. Try guest/guest123');
+                }
+            };
+
+            const handleForgeToken = () => {
+                if (discoveredSecret !== SECRET) {
+                    setError('Invalid secret key. Keep trying! 🔑');
+                    return;
+                }
+
+                const payload = {
+                    user: 'guest',
+                    role: 'admin',
+                    iat: Math.floor(Date.now() / 1000)
+                };
+                const forged = createJWT(payload, discoveredSecret);
+                setForgedToken(forged);
+                setError('');
+            };
+
+            const handleAdminAccess = () => {
+                if (verifyJWT(adminToken, SECRET)) {
+                    const decoded = decodeJWT(adminToken);
+                    if (decoded.payload.role === 'admin') {
+                        setStage('success');
+                        return;
+                    }
+                }
+                setError('Invalid admin token or insufficient privileges');
+            };
+
+            const copyToClipboard = (text) => {
+                navigator.clipboard.writeText(text);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="max-w-4xl w-full">
+                        {/* Header */}
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-white mb-2">🔐 VAPOR Security Labs</h1>
+                            <h2 className="text-2xl text-purple-200 mb-1">Lab 2: CryptoWeak - Token Forgery</h2>
+                            <p className="text-purple-200">A02 - Cryptographic Failures</p>
+                        </div>
+
+                        {/* Login Stage */}
+                        {stage === 'login' && (
+                            <div className="bg-white rounded-lg shadow-2xl p-8 glow">
+                                <h3 className="text-2xl font-bold mb-6 text-gray-800">🔐 VAPOR Auth System v2.0</h3>
+                                <p className="text-gray-600 mb-6">Login to access resources</p>
+                                
+                                <form onSubmit={handleLogin}>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold mb-2 text-gray-700">Username</label>
+                                        <input
+                                            type="text"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                                            placeholder="Enter username"
+                                        />
+                                    </div>
+                                    
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-semibold mb-2 text-gray-700">Password</label>
+                                        <input
+                                            type="password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                                            placeholder="Enter password"
+                                        />
+                                    </div>
+
+                                    {error && (
+                                        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                                            {error}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        type="submit"
+                                        className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold py-3 rounded-lg hover:from-purple-600 hover:to-indigo-700 transition"
+                                    >
+                                        Login →
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
+                        {/* Authenticated Stage */}
+                        {stage === 'authenticated' && (
+                            <div className="space-y-6">
+                                {/* Token Display */}
+                                <div className="bg-white rounded-lg shadow-2xl p-6 glow">
+                                    <h3 className="text-xl font-bold mb-4 text-green-600">✅ Authenticated as: guest</h3>
+                                    <p className="text-sm text-gray-600 mb-2">Role: <span className="font-semibold text-red-600">user</span></p>
+                                    
+                                    <div className="mt-4">
+                                        <label className="block text-sm font-semibold mb-2 text-gray-700">Your Access Token:</label>
+                                        <div className="bg-gray-100 p-4 rounded-lg token-box font-mono text-xs break-all">
+                                            {token}
+                                        </div>
+                                        <button
+                                            onClick={() => copyToClipboard(token)}
+                                            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+                                        >
+                                            📋 Copy Token
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* JWT Decoder */}
+                                <div className="bg-white rounded-lg shadow-2xl p-6 glow">
+                                    <h3 className="text-xl font-bold mb-4 text-gray-800">📊 JWT Structure Analysis</h3>
+                                    
+                                    <div className="space-y-4">
+                                        <div>
+                                            <h4 className="font-semibold text-gray-700 mb-2">Header:</h4>
+                                            <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+{JSON.stringify(decoded.header, null, 2)}
+                                            </pre>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="font-semibold text-gray-700 mb-2">Payload:</h4>
+                                            <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto">
+{JSON.stringify(decoded.payload, null, 2)}
+                                            </pre>
+                                            <p className="text-red-600 text-sm mt-2">⚠️ Notice: "role": "user" ← Need "admin" to access restricted areas!</p>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="font-semibold text-gray-700 mb-2">Signature:</h4>
+                                            <div className="bg-gray-100 p-3 rounded text-xs break-all">
+                                                {decoded.signature}
+                                            </div>
+                                            <p className="text-sm text-gray-600 mt-2">⚠️ Signed with HMAC-SHA256 secret key</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Hints Panel */}
+                                <div className="bg-white rounded-lg shadow-2xl p-6 glow">
+                                    <h3 className="text-xl font-bold mb-4 text-yellow-600">💡 Security Analysis</h3>
+                                    
+                                    <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-500">
+                                        <p className="font-semibold text-yellow-800">⚠️ Weak JWT detected!</p>
+                                        <ul className="list-disc list-inside text-sm text-yellow-700 mt-2 space-y-1">
+                                            <li>Algorithm: HS256 (symmetric)</li>
+                                            <li>Secret appears to be weak</li>
+                                            <li>Try brute forcing the secret</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <button
+                                            onClick={() => setHint1Visible(!hint1Visible)}
+                                            className="w-full px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
+                                        >
+                                            {hint1Visible ? '🔽' : '▶️'} Hint 1
+                                        </button>
+                                        {hint1Visible && (
+                                            <div className="p-4 bg-indigo-50 rounded-lg text-sm">
+                                                <p className="text-indigo-800">Try with <a href="https://jwtauditor.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-indigo-600">jwtauditor.com</a></p>
+                                                <p className="text-xs text-indigo-600 mt-2">Copy your JWT token and use the cracking feature with a wordlist</p>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={() => setHint2Visible(!hint2Visible)}
+                                            className="w-full px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                                        >
+                                            {hint2Visible ? '🔽' : '▶️'} Hint 2
+                                        </button>
+                                        {hint2Visible && (
+                                            <div className="p-4 bg-purple-50 rounded-lg text-sm">
+                                                <p className="text-purple-800">🦋 Colourful Insect holds more secret</p>
+                                                <p className="text-xs text-purple-600 mt-2">Think about nature... something that flies...</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={() => setStage('forge')}
+                                        className="w-full mt-4 px-4 py-3 bg-gradient-to-r from-green-500 to-teal-600 text-white font-bold rounded-lg hover:from-green-600 hover:to-teal-700"
+                                    >
+                                        🔨 I found the secret! Forge JWT →
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Forge Stage */}
+                        {stage === 'forge' && (
+                            <div className="space-y-6">
+                                <button
+                                    onClick={() => setStage('authenticated')}
+                                    className="text-white hover:text-purple-200 mb-4"
+                                >
+                                    ← Back to Analysis
+                                </button>
+
+                                <div className="bg-white rounded-lg shadow-2xl p-6 glow">
+                                    <h3 className="text-xl font-bold mb-4 text-gray-800">🔨 JWT Forge Tool</h3>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold mb-2 text-gray-700">Discovered Secret:</label>
+                                        <input
+                                            type="text"
+                                            value={discoveredSecret}
+                                            onChange={(e) => setDiscoveredSecret(e.target.value)}
+                                            className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                                            placeholder="Enter the secret you cracked"
+                                        />
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-semibold mb-2 text-gray-700">Payload Editor:</label>
+                                        <pre className="bg-gray-100 p-4 rounded text-sm">
+{`{
+  "user": "guest",
+  "role": "admin",  ← Modified
+  "iat": ${Math.floor(Date.now() / 1000)}
+}`}
+                                        </pre>
+                                    </div>
+
+                                    {error && (
+                                        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+                                            {error}
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={handleForgeToken}
+                                        className="w-full px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold rounded-lg hover:from-orange-600 hover:to-red-700"
+                                    >
+                                        ⚙️ Generate Forged JWT
+                                    </button>
+
+                                    {forgedToken && (
+                                        <div className="mt-6">
+                                            <label className="block text-sm font-semibold mb-2 text-green-700">✅ Generated Token:</label>
+                                            <div className="bg-green-50 p-4 rounded-lg token-box font-mono text-xs break-all border-2 border-green-500">
+                                                {forgedToken}
+                                            </div>
+                                            <div className="flex gap-2 mt-2">
+                                                <button
+                                                    onClick={() => copyToClipboard(forgedToken)}
+                                                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
+                                                >
+                                                    📋 Copy
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setAdminToken(forgedToken);
+                                                        setStage('admin');
+                                                    }}
+                                                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-semibold"
+                                                >
+                                                    🚀 Submit to Admin Panel →
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Admin Panel */}
+                        {stage === 'admin' && (
+                            <div className="bg-white rounded-lg shadow-2xl p-6 glow">
+                                <h3 className="text-xl font-bold mb-4 text-gray-800">🔒 Admin Panel</h3>
+                                <p className="text-sm text-gray-600 mb-4">This area requires admin privileges</p>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-semibold mb-2 text-gray-700">Submit Admin JWT:</label>
+                                    <textarea
+                                        value={adminToken}
+                                        onChange={(e) => setAdminToken(e.target.value)}
+                                        className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 font-mono text-xs h-32"
+                                        placeholder="Paste your forged admin JWT here"
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setStage('forge')}
+                                        className="px-4 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500"
+                                    >
+                                        ← Back
+                                    </button>
+                                    <button
+                                        onClick={handleAdminAccess}
+                                        className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold rounded-lg hover:from-purple-600 hover:to-indigo-700"
+                                    >
+                                        🚀 Validate & Access
+                                    </button>
+                                </div>
+
+                                <p className="text-xs text-gray-500 mt-4">ℹ️ Requires: role = "admin"</p>
+                            </div>
+                        )}
+
+                        {/* Success Stage */}
+                        {stage === 'success' && (
+                            <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-lg shadow-2xl p-8 glow text-white">
+                                <h3 className="text-3xl font-bold mb-4">✅ Admin Access Granted!</h3>
+                                <p className="text-2xl mb-6">🎉 Congratulations!</p>
+                                <p className="mb-6">You successfully forged an admin JWT and escalated your privileges!</p>
+                                
+                                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-6 mb-6">
+                                    <h4 className="text-xl font-bold mb-3">🚩 FLAG UNLOCKED:</h4>
+                                    <div className="bg-black bg-opacity-50 p-4 rounded-lg font-mono text-lg text-center">
+                                        flag{'{'}jwt_s3cr3t_cr4ck3d_v4p0r{'}'}
+                                    </div>
+                                    <button
+                                        onClick={() => copyToClipboard('flag{jwt_s3cr3t_cr4ck3d_v4p0r}')}
+                                        className="w-full mt-3 px-4 py-2 bg-white text-green-600 font-semibold rounded-lg hover:bg-gray-100"
+                                    >
+                                        📋 Copy Flag
+                                    </button>
+                                </div>
+
+                                <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-6">
+                                    <h4 className="text-lg font-bold mb-3">What you learned:</h4>
+                                    <ul className="space-y-2 text-sm">
+                                        <li>✓ JWT structure and encoding (Header, Payload, Signature)</li>
+                                        <li>✓ HMAC-SHA256 symmetric signing vulnerabilities</li>
+                                        <li>✓ Brute forcing weak JWT secrets</li>
+                                        <li>✓ Token forgery attacks</li>
+                                        <li>✓ Privilege escalation via JWT manipulation</li>
+                                    </ul>
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        setStage('login');
+                                        setUsername('');
+                                        setPassword('');
+                                        setToken('');
+                                        setDecoded(null);
+                                        setHint1Visible(false);
+                                        setHint2Visible(false);
+                                        setDiscoveredSecret('');
+                                        setForgedToken('');
+                                        setAdminToken('');
+                                        setError('');
+                                    }}
+                                    className="w-full mt-6 px-4 py-3 bg-white text-green-600 font-bold rounded-lg hover:bg-gray-100"
+                                >
+                                    🔄 Restart Lab
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Footer */}
+                        <div className="text-center mt-8 text-purple-200 text-sm">
+                            <p>🛡️ VAPOR Security Labs - Educational Purpose Only</p>
+                            <p className="mt-1">Learn security concepts in a safe environment</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
