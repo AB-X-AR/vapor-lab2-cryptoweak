@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- THIS MAY HELP :: guest:guest123 -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- guest:guest123-->
     <title>Lab 2: CryptoWeak - Token Forgery | VAPOR Security Labs</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -94,7 +94,7 @@
             const [adminToken, setAdminToken] = useState('');
             const [error, setError] = useState('');
 
-            const SECRET = 'butterfly';
+            const SECRET = 'changeme';
 
             const handleLogin = (e) => {
                 e.preventDefault();
@@ -261,17 +261,8 @@
 
                                 {/* Hints Panel */}
                                 <div className="bg-white rounded-lg shadow-2xl p-6 glow">
-                                    <h3 className="text-xl font-bold mb-4 text-yellow-600">💡 Security Analysis</h3>
+                                    <h3 className="text-xl font-bold mb-4 text-yellow-600">💡 Need Help?</h3>
                                     
-                                    <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-500">
-                                        <p className="font-semibold text-yellow-800">⚠️ Weak JWT detected!</p>
-                                        <ul className="list-disc list-inside text-sm text-yellow-700 mt-2 space-y-1">
-                                            <li>Algorithm: HS256 (symmetric)</li>
-                                            <li>Secret appears to be weak</li>
-                                            <li>Try brute forcing the secret</li>
-                                        </ul>
-                                    </div>
-
                                     <div className="space-y-3">
                                         <button
                                             onClick={() => setHint1Visible(!hint1Visible)}
@@ -294,8 +285,8 @@
                                         </button>
                                         {hint2Visible && (
                                             <div className="p-4 bg-purple-50 rounded-lg text-sm">
-                                                <p className="text-purple-800">🦋 Colourful Insect holds more secret</p>
-                                                <p className="text-xs text-purple-600 mt-2">Think about nature... something that flies...</p>
+                                                <p className="text-purple-800">🔑 The secret might be something simple and common</p>
+                                                <p className="text-xs text-purple-600 mt-2">Think about default passwords... what do admins commonly use?</p>
                                             </div>
                                         )}
                                     </div>
